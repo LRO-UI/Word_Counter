@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Word Counter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400..900&family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    box-sizing:border-box;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+    --bg:#0d0f14; --panel:#14171f; --panel-edge:#232732;
+    --blue:#3f6fa8; --blue2:#5c7f9e; --steel:#7c8698;
+    --ink:#e7eaf0; --ink-soft:#727c8c; --line:#252a35;
+    --font-ui:'Space Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-display:'Playfair Display', Georgia, 'Times New Roman', serif;
+    color-scheme:dark;
+  }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ color-scheme:dark; } }
+  :root[data-theme="dark"]{ color-scheme:dark; }
+
+  *{ box-sizing:border-box; }
+  html{ height:100%; scroll-padding-top:env(safe-area-inset-top,0px); }
+  body{
+    margin:0; min-height:100%; background:var(--bg); color:var(--ink);
+    font-family:var(--font-ui); display:flex; flex-direction:column;
+  }
+
+  /* ---------- Header ---------- */
+  header{
+    padding:22px 30px; border-bottom:4px double var(--blue2);
+    display:flex; align-items:baseline; gap:16px; flex-wrap:wrap;
+  }
+  header h1{
+    margin:0; font-family:var(--font-display); font-weight:800;
+    font-size:1.5rem; letter-spacing:.02em;
+  }
+  header span{
+    color:var(--ink-soft); font-size:.72rem; text-transform:uppercase; letter-spacing:.24em;
+  }
+
+  .app{ display:flex; flex:1; flex-wrap:wrap; }
+
+  /* ---------- Stage (framed editor) ---------- */
+  .stage{
+    flex:3 1 480px; min-width:0; padding:40px;
+    display:flex; border-right:1px solid var(--line);
+  }
+  .rail-frame{ position:relative; flex:1; display:flex; min-height:420px; }
+  .rail-frame::before, .rail-frame::after{
+    content:''; position:absolute; pointer-events:none; z-index:2;
+  }
+  .rail-frame::before{ inset:8px;  border:1px solid rgba(231,234,240,.6); }
+  .rail-frame::after{  inset:13px; border:1px solid rgba(92,127,158,.35); }
+  .rail-d{
+    position:absolute; width:10px; height:10px; z-index:3;
+    background:var(--blue); border:2px solid var(--bg);
+    transform:translate(-50%,-50%) rotate(45deg);
+    box-shadow:0 0 0 1px rgba(231,234,240,.5);
+  }
+  .rail-d.tl{ top:8px; left:8px; }
+  .rail-d.tr{ top:8px; left:calc(100% - 8px); }
+  .rail-d.bl{ top:calc(100% - 8px); left:8px; }
+  .rail-d.br{ top:calc(100% - 8px); left:calc(100% - 8px); }
+
+  .editor{
+    flex:1; display:flex; flex-direction:column;
+    margin:13px; background:var(--panel);
+  }
+  textarea{
+    flex:1; width:100%; resize:none; border:0; outline:none;
+    background:transparent; color:var(--ink);
+    font-family:var(--font-ui); font-size:1.02rem; line-height:1.7;
+    padding:34px 38px; caret-color:var(--blue);
+  }
+  textarea::placeholder{ color:var(--ink-soft); }
+  textarea:focus-visible{ box-shadow:inset 0 0 0 1px var(--blue); }
+  .editor-foot{
+    display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    padding:12px 38px 16px; border-top:1px solid var(--line);
+    color:var(--ink-soft); font-size:.78rem;
+  }
+  .editor-foot b{ color:var(--ink); font-weight:500; }
+
+  /* ---------- Rail ---------- */
+  .rail{
+    flex:1 1 320px; max-width:100%; padding:34px 30px;
+    display:flex; flex-direction:column; gap:34px;
+  }
+  .group-title{
+    display:flex; align-items:center; gap:10px;
+    text-transform:uppercase; letter-spacing:.26em; font-size:.66rem;
+    color:var(--ink-soft); margin:0 0 12px; font-weight:500;
+  }
+  .group-title::before{
+    content:''; width:6px; height:6px; background:var(--blue);
+    transform:rotate(45deg); flex:none;
+  }
+  .group-title::after{
+    content:''; flex:1; height:3px;
+    border-top:1px solid var(--blue); border-bottom:1px solid var(--blue2);
+  }
+
+  /* Stat list */
+  .stats{ list-style:none; margin:0; padding:0; }
+  .stats li{
+    display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+    padding:11px 2px; border-bottom:1px solid var(--line);
+  }
+  .stats li:last-child{ border-bottom:0; }
+  .stats .label{ font-size:.86rem; color:var(--ink-soft); }
+  .stats .label small{ display:block; font-size:.7rem; color:var(--steel); opacity:.8; margin-top:2px; }
+  .stats .val{
+    font-family:var(--font-display); font-weight:700; font-size:1.35rem;
+    font-variant-numeric:lining-nums tabular-nums; color:var(--ink);
+  }
+  .stats li.lead .val{ color:#fff; font-size:1.6rem; }
+  .stats li.lead .label{ color:var(--ink); }
+
+  /* Top words */
+  .top{ list-style:none; margin:0; padding:0; counter-reset:rank; }
+  .top li{
+    counter-increment:rank;
+    display:grid; grid-template-columns:22px 1fr auto; align-items:center;
+    gap:4px 10px; padding:7px 0;
+  }
+  .top li::before{
+    content:counter(rank); font-size:.7rem; color:var(--steel);
+    font-variant-numeric:tabular-nums; text-align:right;
+  }
+  .top .word{ font-size:.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .top .count{ font-size:.8rem; color:var(--ink-soft); font-variant-numeric:tabular-nums; }
+  .top .bar{
+    grid-column:2 / 4; height:3px; background:var(--line); position:relative;
+  }
+  .top .bar i{
+    position:absolute; inset:0 auto 0 0; background:var(--blue2);
+    transition:width .25s ease;
+  }
+  .top li:first-child .bar i{ background:var(--blue); }
+  .empty{ color:var(--ink-soft); font-size:.84rem; line-height:1.6; margin:4px 0 0; }
+
+  /* Toggle */
+  .toggle{
+    display:flex; align-items:center; gap:10px; margin-top:14px;
+    font-size:.8rem; color:var(--ink-soft); cursor:pointer; user-select:none;
+  }
+  .toggle input{
+    appearance:none; -webkit-appearance:none; margin:0;
+    width:14px; height:14px; border:1px solid var(--blue2); background:var(--panel);
+    display:grid; place-content:center; cursor:pointer; flex:none;
+  }
+  .toggle input::after{
+    content:''; width:6px; height:6px; background:var(--blue);
+    transform:rotate(45deg) scale(0); transition:transform .15s ease;
+  }
+  .toggle input:checked::after{ transform:rotate(45deg) scale(1); }
+  .toggle input:focus-visible{ outline:1px solid var(--ink); outline-offset:2px; }
+
+  /* Bracketed buttons */
+  .tools{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  button.tool{
+    --c:var(--blue2);
+    border:1px solid var(--line);
+    background:
+      linear-gradient(var(--c),var(--c)) top left/8px 1px no-repeat,
+      linear-gradient(var(--c),var(--c)) top left/1px 8px no-repeat,
+      linear-gradient(var(--c),var(--c)) top right/8px 1px no-repeat,
+      linear-gradient(var(--c),var(--c)) top right/1px 8px no-repeat,
+      linear-gradient(var(--c),var(--c)) bottom left/8px 1px no-repeat,
+      linear-gradient(var(--c),var(--c)) bottom left/1px 8px no-repeat,
+      linear-gradient(var(--c),var(--c)) bottom right/8px 1px no-repeat,
+      linear-gradient(var(--c),var(--c)) bottom right/1px 8px no-repeat,
+      var(--panel);
+    box-shadow:inset 0 0 0 3px var(--panel), inset 0 0 0 4px var(--panel-edge);
+    color:var(--ink); font-family:var(--font-ui); font-size:.72rem; letter-spacing:.06em;
+    padding:11px 8px; cursor:pointer;
+  }
+  button.tool:hover{ --c:#fff; }
+  button.tool:focus-visible{ outline:1px solid var(--blue); outline-offset:2px; }
+
+  @media (max-width:760px){
+    .stage{ padding:20px; border-right:0; border-bottom:1px solid var(--line); }
+    .rail-frame{ min-height:320px; }
+    textarea{ padding:26px 24px; }
+    .editor-foot{ padding:12px 24px 14px; }
+    .rail{ padding:26px 20px; }
+    header{ padding:18px 20px; }
+  }
+  @media (prefers-reduced-motion:reduce){ *{ transition:none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Word counter</h1>
+</header>
+
+<main class="app">
+  <section class="stage">
+    <div class="rail-frame">
+      <div class="rail-d tl"></div><div class="rail-d tr"></div>
+      <div class="rail-d bl"></div><div class="rail-d br"></div>
+      <div class="editor">
+        <label for="text" class="visually-hidden" style="position:absolute;left:-9999px">Your text</label>
+        <textarea id="text" spellcheck="true" placeholder="Paste or type your text here. Every count updates as you write."></textarea>
+        <div class="editor-foot">
+          <span>Reading time <b id="read">0 min</b></span>
+          <span>Characters without spaces <b id="noSpace">0</b></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="rail" aria-label="Text statistics">
+    <div>
+      <h2 class="group-title">Counts</h2>
+      <ul class="stats" aria-live="polite">
+        <li class="lead"><span class="label">Words</span><span class="val" id="words">0</span></li>
+        <li><span class="label">Characters<small>including spaces</small></span><span class="val" id="chars">0</span></li>
+        <li><span class="label">Spaces</span><span class="val" id="spaces">0</span></li>
+        <li><span class="label">Paragraphs</span><span class="val" id="paras">0</span></li>
+        <li><span class="label">Lines</span><span class="val" id="lines">0</span></li>
+        <li><span class="label">Sentences</span><span class="val" id="sents">0</span></li>
+      </ul>
+    </div>
+
+    <div>
+      <h2 class="group-title">Top 10 words</h2>
+      <ol class="top" id="top"></ol>
+      <p class="empty" id="topEmpty">Your most used words will appear here once you start writing.</p>
+      <label class="toggle"><input type="checkbox" id="skipCommon" checked> Ignore common words (the, and, de, que…)</label>
+    </div>
+
+    <div>
+      <h2 class="group-title">Actions</h2>
+      <div class="tools">
+        <button class="tool" id="copyBtn" type="button">Copy report</button>
+        <button class="tool" id="clearBtn" type="button">Clear text</button>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const ta = $('text');
+  const fmt = n => n.toLocaleString();
+
+  // English + Portuguese function words, used only when "Ignore common words" is on
+  const STOP = new Set(("a an the and or but if of to in on at by for with from as is are was were be been being it its this that these those " +
+    "i you he she we they me him her us them my your his our their not no so do does did have has had will would can could should " +
+    "just than then there here what which who whom when where why how all any some more most also into about over up out " +
+    "o os as um uma uns umas de do da dos das em no na nos nas por pelo pela pelos pelas para pra com sem e ou mas que se " +
+    "é ser são foi era está estão ao aos à às eu tu ele ela nós vós eles elas me te lhe nos vos lhes meu minha seu sua " +
+    "isso isto aquilo esse essa este esta mais muito já não sim também como quando onde porque quem qual").split(/\s+/));
+
+  const WORD_RE = /[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu;
+
+  function analyze(text){
+    const words = text.match(WORD_RE) || [];
+    const chars = [...text].length;
+    const spaces = (text.match(/[ \t\u00A0]/g) || []).length;
+    const noSpace = [...text.replace(/\s/g, '')].length;
+    const trimmed = text.trim();
+    const lines = trimmed ? text.replace(/\s+$/,'').split(/\r\n|\r|\n/).length : 0;
+    const paras = trimmed ? text.split(/(?:\r?\n\s*){2,}/).filter(p => /[\p{L}\p{N}]/u.test(p)).length : 0;
+    const sents = trimmed
+      ? text.split(/(?<=[.!?…])["'”’)\]]*\s+|(?:\r?\n\s*){2,}/).filter(s => /[\p{L}\p{N}]/u.test(s)).length
+      : 0;
+    return { words, chars, spaces, noSpace, lines, paras, sents };
+  }
+
+  function topWords(words, skip){
+    const freq = new Map();
+    for (const w of words){
+      const k = w.toLocaleLowerCase();
+      if (skip && (STOP.has(k) || /^\d+$/.test(k))) continue;
+      freq.set(k, (freq.get(k) || 0) + 1);
+    }
+    return [...freq.entries()].sort((a,b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0,10);
+  }
+
+  let last = null;
+  function render(){
+    const text = ta.value;
+    const r = analyze(text);
+    $('words').textContent = fmt(r.words.length);
+    $('chars').textContent = fmt(r.chars);
+    $('spaces').textContent = fmt(r.spaces);
+    $('paras').textContent = fmt(r.paras);
+    $('lines').textContent = fmt(r.lines);
+    $('sents').textContent = fmt(r.sents);
+    $('noSpace').textContent = fmt(r.noSpace);
+    const mins = r.words.length / 230;
+    $('read').textContent = r.words.length === 0 ? '0 min' : mins < 1 ? '< 1 min' : Math.round(mins) + ' min';
+
+    const top = topWords(r.words, $('skipCommon').checked);
+    const list = $('top');
+    list.innerHTML = '';
+    const max = top.length ? top[0][1] : 1;
+    for (const [w, c] of top){
+      const li = document.createElement('li');
+      const word = document.createElement('span'); word.className = 'word'; word.textContent = w; word.title = w;
+      const count = document.createElement('span'); count.className = 'count'; count.textContent = fmt(c);
+      const bar = document.createElement('span'); bar.className = 'bar';
+      const fill = document.createElement('i'); fill.style.width = (c / max * 100) + '%';
+      bar.appendChild(fill);
+      li.append(word, count, bar);
+      list.appendChild(li);
+    }
+    $('topEmpty').style.display = top.length ? 'none' : 'block';
+    last = { r, top };
+
+    try { localStorage.setItem('casework-wc-text', text); } catch(e){}
+  }
+
+  let raf;
+  ta.addEventListener('input', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(render); });
+  $('skipCommon').addEventListener('change', render);
+
+  $('clearBtn').addEventListener('click', () => { ta.value = ''; render(); ta.focus(); });
+
+  $('copyBtn').addEventListener('click', async () => {
+    if (!last) return;
+    const { r, top } = last;
+    const report = [
+      `Words: ${r.words.length}`,
+      `Characters: ${r.chars}`,
+      `Spaces: ${r.spaces}`,
+      `Paragraphs: ${r.paras}`,
+      `Lines: ${r.lines}`,
+      `Sentences: ${r.sents}`,
+      '',
+      'Top 10 words:',
+      ...top.map(([w,c], i) => `${i+1}. ${w} (${c})`)
+    ].join('\n');
+    const btn = $('copyBtn');
+    try {
+      await navigator.clipboard.writeText(report);
+      btn.textContent = 'Report copied';
+    } catch(e){
+      btn.textContent = 'Copy unavailable';
+    }
+    setTimeout(() => { btn.textContent = 'Copy report'; }, 1600);
+  });
+
+  try { const saved = localStorage.getItem('casework-wc-text'); if (saved) ta.value = saved; } catch(e){}
+  render();
+})();
+</script>
+</body>
+</html>
