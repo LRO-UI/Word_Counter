@@ -1,4 +1,4 @@
-# Project Name
+# Word Counter
 
 A simple word counter with counters for characters, spaces, paragraphs, lines, sentences and top 10 words most used.
 
